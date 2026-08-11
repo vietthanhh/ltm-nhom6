@@ -1,3 +1,9 @@
+"""
+Struct Task dùng chung — đại diện 1 dòng download trên UI.
+Quy tắc : chỉ queue_manager.py và network_client.py
+được phép thay đổi status/percent/speed. gui.py CHỈ ĐỌC để hiển thị,
+không tự set trạng thái.
+"""
 from dataclasses import dataclass
 
 @dataclass
