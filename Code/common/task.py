@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 @dataclass
-class task:
+class Task:
     task_id: str
     filename: str          # tên gốc ở server
     final_filename: str    # tên sau khi xử lý trùng, VD: report(1).pdf
