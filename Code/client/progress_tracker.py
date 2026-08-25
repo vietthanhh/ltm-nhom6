@@ -1,6 +1,6 @@
 """
 VAI TRÒ 3 — Quản lý hàng đợi (Concurrency)
-Phụ trách: tên
+Phụ trách: Lê Minh Hiền
 """
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
