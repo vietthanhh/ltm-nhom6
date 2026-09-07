@@ -2,9 +2,12 @@ import socket
 import threading
 import os
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SHARED_FILES_DIR = os.path.join(BASE_DIR, "shared_files")
+
 # TODO: nối liên kết file lại (common/constants.py của nhóm)
 PORT = 5000
-SERVER = socket.gethostbyname(socket.gethostname())
+SERVER = "127.0.0.1"
 CHUNK_SIZE = 4096
 
 ADDR = (SERVER, PORT)
@@ -53,10 +56,10 @@ def handle_client(conn, addr):
             print (f"[{addr}] {msg}")
             #Xử lý lệnh LIST (Client xin danh sách file hiện có)
             if msg =="LIST":
-                file_list = os.listdir("shared_files")
+                file_list = os.listdir(SHARED_FILES_DIR)
                 # Duyệt từng file, lấy dung lượng và đóng gói
                 for file_name in file_list:
-                    file_path = os.path.join("shared_files", file_name)
+                    file_path = os.path.join(SHARED_FILES_DIR, file_name)
                     file_size = os.stat(file_path).st_size
 
                     # Format: FILE|tên_file|kích_thước
@@ -68,7 +71,7 @@ def handle_client(conn, addr):
             #Xử lý lệnh GET
             elif msg.startswith("GET|"):
                 file_name = msg.split("|")[1]
-                file_path = os.path.join("shared_files", file_name)
+                file_path = os.path.join(SHARED_FILES_DIR, file_name)
 
                 # Không cho client dùng ".." để thoát khỏi thư mục shared_files
                 if ".." in file_name or not os.path.exists(file_path):
