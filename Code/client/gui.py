@@ -218,6 +218,15 @@ class MainWindow(QMainWindow):
 
         self.download_table.setItem(row, 4, status_item)
 
+    # ==================== HÀM GỌI THÊM TASK ====================
+    def call_add_download_task(self, filename: str, size: int):
+        if self.is_mock_mode:
+            t_id = f"task_{uuid.uuid4().hex[:5]}"
+            return t_id, filename
+        else:
+            from Code.client.queue_manager import add_download_task
+            return add_download_task(filename, size)
+
     
 if __name__ == "__main__":
     app = QApplication(sys.argv)
