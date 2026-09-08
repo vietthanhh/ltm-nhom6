@@ -1,113 +1,113 @@
 """
 VAI TRÒ 3 — Quản lý hàng đợi (Concurrency)
-Phụ trách: tên
+Phụ trách: Lê Minh Hiền
 """
-from concurrent.futures import ThreadPoolExecutor
+from collections import deque
+from dataclasses import replace
 from threading import Lock
 import time
 
-from common.constants import MAX_CONCURRENT
-from common.task import Task
+from Code.common.task import Task
+
+
+MIN_UPDATE_INTERVAL_SEC = 0.15
+TERMINAL_STATUSES = ("Completed", "Failed", "Cancelled")
+
+
+def format_speed(bytes_per_sec: float) -> str:
+    if bytes_per_sec < 1024:
+        return f"{bytes_per_sec:.0f} B/s"
+
+    if bytes_per_sec < 1024 * 1024:
+        return f"{bytes_per_sec / 1024:.1f} KB/s"
+
+    return f"{bytes_per_sec / (1024 * 1024):.2f} MB/s"
+
+
+class TaskState:
+    def __init__(self):
+        self.last_emit_time = time.monotonic() - MIN_UPDATE_INTERVAL_SEC
+        self.last_status = None
+        self.last_bytes = 0.0
+        self.last_time = time.monotonic()
 
 
 class ProgressTracker:
     def __init__(self):
-        self.tasks = {}
-
-        self.executor = ThreadPoolExecutor(
-            max_workers=MAX_CONCURRENT
-        )
-
         self.lock = Lock()
+        self.states = {}
+        self.pending_updates = deque()
 
-    def add_task(self, task: Task):
+    def notify(self, task: Task, force: bool = False):
         with self.lock:
-            task.status = "Waiting"
-            task.percent = 0
-            self.tasks[task.task_id] = task
+            state = self.states.setdefault(
+                task.task_id,
+                TaskState()
+            )
 
-    def get_task(self, task_id: str):
+            now = time.monotonic()
+
+            current_bytes = (
+                task.size * task.percent / 100.0
+                if task.size
+                else 0.0
+            )
+
+            elapsed = now - state.last_time
+            speed = 0.0
+
+            if elapsed > 0 and task.status == "Downloading":
+                speed = max(
+                    (current_bytes - state.last_bytes) / elapsed,
+                    0.0
+                )
+
+            state.last_bytes = current_bytes
+            state.last_time = now
+
+            status_changed = task.status != state.last_status
+            terminal = task.status in TERMINAL_STATUSES
+
+            if (
+                not force
+                and not status_changed
+                and not terminal
+                and now - state.last_emit_time < MIN_UPDATE_INTERVAL_SEC
+            ):
+                return
+
+            state.last_emit_time = now
+            state.last_status = task.status
+
+            if task.status == "Downloading":
+                speed_text = format_speed(speed)
+            elif task.status == "Completed":
+                speed_text = "Done"
+            else:
+                speed_text = ""
+
+            snapshot = replace(
+                task,
+                speed=speed_text
+            )
+
+            self.pending_updates.append(snapshot)
+
+    def poll_updates(self) -> list[Task]:
         with self.lock:
-            return self.tasks.get(task_id)
+            updates = list(self.pending_updates)
+            self.pending_updates.clear()
 
-    def get_all_tasks(self):
-        with self.lock:
-            return list(self.tasks.values())
+        return updates
 
-    def update_status(self, task_id: str, status: str):
-        with self.lock:
-            task = self.tasks.get(task_id)
-
-            if task is None:
-                return False
-
-            task.status = status
-            return True
-
-    def update_progress(self, task_id: str, percent: int):
-        with self.lock:
-            task = self.tasks.get(task_id)
-
-            if task is None:
-                return False
-
-            percent = max(0, min(100, percent))
-            task.percent = percent
-
-            if percent >= 100:
-                task.status = "Completed"
-
-            return True
-
-    def get_waiting_tasks(self):
-        with self.lock:
-            return [
-                task
-                for task in self.tasks.values()
-                if task.status == "Waiting"
-            ]
-
-    def get_downloading_tasks(self):
-        with self.lock:
-            return [
-                task
-                for task in self.tasks.values()
-                if task.status == "Downloading"
-            ]
+    def get_updates(self) -> list[Task]:
+        return self.poll_updates()
 
     def remove_task(self, task_id: str):
         with self.lock:
-            if task_id not in self.tasks:
-                return False
+            self.states.pop(task_id, None)
 
-            del self.tasks[task_id]
-            return True
-
-    def run_test_task(self, task_id: str, seconds: int = 3):
+    def clear(self):
         with self.lock:
-            task = self.tasks.get(task_id)
-
-            if task is None:
-                return
-
-            task.status = "Downloading"
-
-        print(f"[START] {task_id}")
-
-        time.sleep(seconds)
-
-        self.update_progress(task_id, 100)
-
-        print(f"[DONE] {task_id}")
-
-    def start_test_tasks(self):
-        waiting_tasks = self.get_waiting_tasks()
-
-        for task in waiting_tasks:
-            self.executor.submit(
-                self.run_test_task,
-                task.task_id
-            )
-
-    def shutdown(self):
-        self.executor.shutdown(wait=True)
+            self.states.clear()
+            self.pending_updates.clear()

@@ -115,7 +115,141 @@ class MainWindow(QMainWindow):
                 f"Không thể lấy danh sách file từ Server!\nChi tiết: {str(e)}"
             )
 
-   
+    # ==================== CHỨC NĂNG 2: XỬ LÝ DRAG & DROP ====================
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat("application/x-qabstractitemmodeldatalist"):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        selected_items = self.server_table.selectedItems()
+        if not selected_items:
+            return
+
+        # Lấy danh sách các dòng được chọn (Hỗ trợ kéo 1 hoặc nhiều file cùng lúc)
+        selected_rows = sorted(list(set(item.row() for item in selected_items)))
+        
+        for row in selected_rows:
+            filename = self.server_table.item(row, 0).text()
+            size = int(self.server_table.item(row, 1).text())
+
+            # 1. Gọi add_download_task() từ Vai trò 3
+            task_id, final_filename = self.call_add_download_task(filename, size)
+
+            # 2. Khởi tạo đối tượng Task (dùng struct Task)
+            task_obj = Task(
+                task_id=task_id,
+                filename=filename,
+                final_filename=final_filename,
+                size=size,
+                status="Waiting",
+                percent=0,
+                speed="0 KB/s"
+            )
+
+            # 3. Tạo dòng mới ở Khu vực 2 với trạng thái Waiting
+            self.add_task_to_gui(task_obj)
+
+            # 4. Kích hoạt tiến trình tải ngầm
+            if self.is_mock_mode:
+                self.run_mock_download(task_id)
+
+        event.acceptProposedAction()
+
+    # ==================== HIỂN THỊ DÒNG MỚI NÊN KHU VỰC 2 ====================
+    def add_task_to_gui(self, task: Task):
+        row = self.download_table.rowCount()
+        self.download_table.insertRow(row)
+
+        # Cột 0: Task ID
+        self.download_table.setItem(row, 0, QTableWidgetItem(str(task.task_id)))
+        
+        # Cột 1: Tên file đích (đã xử lý trùng tên)
+        self.download_table.setItem(row, 1, QTableWidgetItem(task.final_filename))
+
+        # Cột 2: Progress Bar
+        progress_bar = QProgressBar()
+        progress_bar.setValue(int(task.percent))
+        self.download_table.setCellWidget(row, 2, progress_bar)
+
+        # Cột 3: Tốc độ
+        self.download_table.setItem(row, 3, QTableWidgetItem(task.speed))
+
+        # Cột 4: Trạng thái (Mặc định Waiting màu vàng)
+        status_item = QTableWidgetItem(task.status)
+        status_item.setBackground(Qt.GlobalColor.yellow)
+        status_item.setForeground(Qt.GlobalColor.black)
+        self.download_table.setItem(row, 4, status_item)
+
+        # Lưu ánh xạ task_id vào dòng
+        self.task_row_map[task.task_id] = row
+
+    # ==================== CHỨC NĂNG 3: CẬP NHẬT TRẠNG THÁI & MÀU SẮC (on_progress) ====================
+    def on_progress(self, task_id: str, status: str, percent: float, speed: str):
+        if task_id not in self.task_row_map:
+            return
+
+        row = self.task_row_map[task_id]
+
+        # Cập nhật Progress Bar
+        p_bar = self.download_table.cellWidget(row, 2)
+        if p_bar:
+            p_bar.setValue(int(percent))
+
+        # Cập nhật Tốc độ
+        self.download_table.setItem(row, 3, QTableWidgetItem(speed))
+
+        # Cập nhật Nhãn Trạng Thái & Màu sắc phân biệt
+        status_item = QTableWidgetItem(status)
+        if status == "Waiting":
+            status_item.setBackground(Qt.GlobalColor.yellow)
+            status_item.setForeground(Qt.GlobalColor.black)
+        elif status == "Downloading":
+            status_item.setBackground(Qt.GlobalColor.cyan)
+            status_item.setForeground(Qt.GlobalColor.black)
+        elif status == "Completed":
+            status_item.setBackground(Qt.GlobalColor.green)
+            status_item.setForeground(Qt.GlobalColor.white)
+        elif status == "Failed":
+            status_item.setBackground(Qt.GlobalColor.red)
+            status_item.setForeground(Qt.GlobalColor.white)
+
+        self.download_table.setItem(row, 4, status_item)
+
+    # ==================== HÀM GỌI THÊM TASK ====================
+    def call_add_download_task(self, filename: str, size: int):
+        if self.is_mock_mode:
+            t_id = f"task_{uuid.uuid4().hex[:5]}"
+            return t_id, filename
+        else:
+            from Code.client.queue_manager import add_download_task
+            return add_download_task(filename, size)
+
+    # ==================== MOCK WORKER CHẠY ĐỘC LẬP ====================
+    def run_mock_download(self, task_id):
+        class MockWorker(QThread):
+            def __init__(self, task_id, signal):
+                super().__init__()
+                self.task_id = task_id
+                self.signal = signal
+
+            def run(self):
+                # 1. Trạng thái Waiting
+                self.signal.emit(self.task_id, "Waiting", 0.0, "0 KB/s")
+                time.sleep(1)
+
+                # 2. Trạng thái Downloading
+                for p in range(10, 101, 30):
+                    self.signal.emit(self.task_id, "Downloading", float(p), "1024 KB/s")
+                    time.sleep(0.5)
+
+                # 3. Trạng thái Completed
+                self.signal.emit(self.task_id, "Completed", 100.0, "0 KB/s")
+
+        self.worker = MockWorker(task_id, self.signals.progress_updated)
+        self.worker.start()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

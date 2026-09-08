@@ -1,4 +1,7 @@
-
+"""
+VAI TRÒ 4 — Progress & Trạng thái
+Phụ trách: Phan Thanh Thu Ngân 
+"""
 from __future__ import annotations
 
 import time
