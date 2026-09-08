@@ -227,7 +227,30 @@ class MainWindow(QMainWindow):
             from Code.client.queue_manager import add_download_task
             return add_download_task(filename, size)
 
-    
+    # ==================== MOCK WORKER CHẠY ĐỘC LẬP ====================
+    def run_mock_download(self, task_id):
+        class MockWorker(QThread):
+            def __init__(self, task_id, signal):
+                super().__init__()
+                self.task_id = task_id
+                self.signal = signal
+
+            def run(self):
+                # 1. Trạng thái Waiting
+                self.signal.emit(self.task_id, "Waiting", 0.0, "0 KB/s")
+                time.sleep(1)
+
+                # 2. Trạng thái Downloading
+                for p in range(10, 101, 30):
+                    self.signal.emit(self.task_id, "Downloading", float(p), "1024 KB/s")
+                    time.sleep(0.5)
+
+                # 3. Trạng thái Completed
+                self.signal.emit(self.task_id, "Completed", 100.0, "0 KB/s")
+
+        self.worker = MockWorker(task_id, self.signals.progress_updated)
+        self.worker.start()
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow(is_mock_mode=True)
