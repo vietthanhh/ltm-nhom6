@@ -2,16 +2,21 @@ import socket
 import threading
 import os
 
-# TODO: nối liên kết file lại (common/constants.py của nhóm)
-PORT = 5000
-SERVER = socket.gethostbyname(socket.gethostname())
-CHUNK_SIZE = 4096
+# nối liên kết file lại (common/constants.py của nhóm)
+from Code.common.constants import (
+    SERVER_PORT, 
+    CHUNK_SIZE, 
+    MAX_SERVER_CONNECTIONS, 
+    SOCKET_TIMEOUT
+)
+# PORT = 5000
+# CHUNK_SIZE = 4096
 
-ADDR = (SERVER, PORT)
+SERVER = socket.gethostbyname(socket.gethostname())
+ADDR = (SERVER, SERVER_PORT)
 FORMAT = 'utf-8'
 
-MAX_CONNECTIONS = 8
-SOCKET_TIMEOUT = 10
+# Quản lý số lượng kết nối đồng thời
 current_connections = 0
 conn_lock = threading.Lock()
 
@@ -46,7 +51,7 @@ def handle_client(conn, addr):
     global current_connections
 
     conn.settimeout(SOCKET_TIMEOUT)
-    # TODO: Bọc try...finally, dùng Lock 
+
     try:
         msg = recv_line(conn)
         if msg:
@@ -111,7 +116,7 @@ def start():
         conn, addr =server.accept()
         # Dùng Lock check giới hạn, >= 8 thì báo ERROR|Server busy rồi ngắt
         with conn_lock:
-            if current_connections >= MAX_CONNECTIONS:
+            if current_connections >= MAX_SERVER_CONNECTIONS:
                 conn.send("ERROR|Server busy\n".encode(FORMAT))
                 conn.close()
                 continue
@@ -127,6 +132,3 @@ def start():
 
 print("[STARTING] server is listening...")
 start()
-
-
-
