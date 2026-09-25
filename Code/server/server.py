@@ -1,6 +1,14 @@
 import socket
 import threading
 import os
+import sys
+
+# Thêm đường dẫn thư mục gốc project để import Code.common
+sys.path.append(
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../..")
+    )
+)
 
 # nối liên kết file lại (common/constants.py của nhóm)
 from Code.common.constants import (
@@ -9,14 +17,20 @@ from Code.common.constants import (
     MAX_SERVER_CONNECTIONS, 
     SOCKET_TIMEOUT
 )
-# PORT = 5000
-# CHUNK_SIZE = 4096
 
-SERVER = socket.gethostbyname(socket.gethostname())
-ADDR = (SERVER, SERVER_PORT)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SHARED_FILES_DIR = os.path.join(BASE_DIR, "shared_files")
+
+PORT = SERVER_PORT
+SERVER = "127.0.0.1"
+CHUNK_SIZE = CHUNK_SIZE
+
+ADDR = (SERVER, PORT)
 FORMAT = 'utf-8'
 
 # Quản lý số lượng kết nối đồng thời
+MAX_CONNECTIONS = MAX_SERVER_CONNECTIONS
+SOCKET_TIMEOUT = SOCKET_TIMEOUT
 current_connections = 0
 conn_lock = threading.Lock()
 
@@ -58,10 +72,12 @@ def handle_client(conn, addr):
             print (f"[{addr}] {msg}")
             #Xử lý lệnh LIST (Client xin danh sách file hiện có)
             if msg =="LIST":
-                file_list = os.listdir("shared_files")
+                file_list = os.listdir(SHARED_FILES_DIR)
                 # Duyệt từng file, lấy dung lượng và đóng gói
                 for file_name in file_list:
-                    file_path = os.path.join("shared_files", file_name)
+                    file_path = os.path.join(SHARED_FILES_DIR, file_name)
+                    if not os.path.isfile(file_path):
+                        continue
                     file_size = os.stat(file_path).st_size
 
                     # Format: FILE|tên_file|kích_thước
@@ -73,7 +89,7 @@ def handle_client(conn, addr):
             #Xử lý lệnh GET
             elif msg.startswith("GET|"):
                 file_name = msg.split("|")[1]
-                file_path = os.path.join("shared_files", file_name)
+                file_path = os.path.join(SHARED_FILES_DIR, file_name)
 
                 # Không cho client dùng ".." để thoát khỏi thư mục shared_files
                 if ".." in file_name or not os.path.exists(file_path):
@@ -116,7 +132,7 @@ def start():
         conn, addr =server.accept()
         # Dùng Lock check giới hạn, >= 8 thì báo ERROR|Server busy rồi ngắt
         with conn_lock:
-            if current_connections >= MAX_SERVER_CONNECTIONS:
+            if current_connections >= MAX_CONNECTIONS:
                 conn.send("ERROR|Server busy\n".encode(FORMAT))
                 conn.close()
                 continue
