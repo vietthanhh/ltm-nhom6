@@ -14,3 +14,5 @@ Phân công
 - Progress & Trạng thái	Cập nhật tiến trình/tốc độ lên giao diện qua cơ chế UI thread
 - Server	Lắng nghe kết nối, xử lý LIST/GET, phục vụ nhiều client đồng thời, giới hạn connection
 - Test & Tích hợp	Chuẩn bị dữ liệu/server giả để test độc lập, thực hiện test case, tích hợp hệ thống
+
+Link Youtube project: https://youtu.be/ElTfhQgHQPE
